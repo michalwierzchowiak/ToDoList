@@ -1,7 +1,74 @@
 ﻿@page "/"
+@using Microsoft.AspNetCore.SignalR.Client
+@using Shared
+@inject HttpClient Http
 
-<PageTitle>Home</PageTitle>
+<PageTitle>Projekt Studium przypadku - programowanie w grupie programistycznej</PageTitle>
 
-<h1>Hello, world!</h1>
+<h1>Lista ToDo - Michał Wierzchowiak</h1>
 
-Welcome to your new app.
+<div>
+    <input @bind="newItemTitle" placeholder="Co jest do zrobienia?" />
+    <button @onclick="AddItem">Dodaj</button>
+</div>
+
+@if (items == null)
+{
+    <p>Ładowanie...</p>
+}
+else
+{
+    <ul>
+        @foreach (var item in items)
+        {
+            <li>
+                @item.Title
+                <button @onclick="() => DeleteItem(item.Id)" style="color:red; margin-left: 10px;">X</button>
+            </li>
+        }
+    </ul>
+}
+
+@code {
+    private List<TodoEntry>? items;
+    private string newItemTitle = "";
+    private HubConnection? hubConnection;
+
+    private const string ServerUrl = "http://localhost:5164";
+
+    protected override async Task OnInitializedAsync()
+    {
+        Http.BaseAddress = new Uri(ServerUrl);
+
+        await LoadData();
+
+        hubConnection = new HubConnectionBuilder()
+            .WithUrl($"{ServerUrl}/todohub")
+            .Build();
+
+        hubConnection.On("RefreshTasks", async () =>
+        {
+            await LoadData();
+            StateHasChanged();
+        });
+
+        await hubConnection.StartAsync();
+    }
+
+    private async Task LoadData()
+    {
+        items = await Http.GetFromJsonAsync<List<TodoEntry>>("api/todo");
+    }
+
+    private async Task AddItem()
+    {
+        if (string.IsNullOrWhiteSpace(newItemTitle)) return;
+        await Http.PostAsJsonAsync("api/todo", new TodoEntry { Title = newItemTitle });
+        newItemTitle = "";
+    }
+
+    private async Task DeleteItem(int id)
+    {
+        await Http.DeleteAsync($"api/todo/{id}");
+    }
+}
